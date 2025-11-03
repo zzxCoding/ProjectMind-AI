@@ -1,0 +1,53 @@
+# 基础数据库连接
+pymysql==1.1.0
+sqlalchemy==2.0.23
+
+# HTTP请求
+requests==2.31.0
+
+# Ollama客户端
+ollama==0.1.7
+
+# 数据处理
+pandas==2.1.4
+numpy==1.24.3
+
+# 日期时间处理
+python-dateutil==2.8.2
+
+# JSON处理
+json5==0.9.14
+
+# 配置文件处理
+pyyaml==6.0.1
+
+# 日志处理
+colorlog==6.8.0
+
+# 命令行参数解析
+click==8.1.7
+
+# 异步HTTP客户端
+aiohttp==3.9.1
+
+# 异步文件操作
+aiofiles==23.2.0
+
+# 环境变量管理
+python-dotenv==1.0.0
+
+# GitLab API客户端
+python-gitlab==4.1.1
+
+# SonarQube API客户端
+python-sonarqube-api==2.0.5
+
+# Markdown处理
+markdown==3.5.1
+
+# HTML处理和转换
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# AES加密解密
+pycryptodome==3.19.0

@@ -1,0 +1,102 @@
+{
+  "global_config": {
+    "enable": true,
+    "auto_trigger": true,
+    "concurrent_reviews": 3,
+    "default_ai_model": "codellama",
+    "default_ai_temperature": 0.3,
+    "default_ai_max_tokens": 2000,
+    "default_comment_template": "detailed",
+    "max_comment_length": 500000,
+    "notify_on_success": false,
+    "notify_on_warning": true,
+    "notify_on_failure": true,
+    "default_notification_channels": ["gitlab"]
+  },
+  
+  "projects": {
+    "web-app": {
+      "gitlab_project_id": 123,
+      "enable": true,
+      "auto_trigger": true,
+      
+        
+      "ai_config": {
+        "enabled": true,
+        "model": "codellama",
+        "temperature": 0.3,
+        "max_tokens": 2000,
+        "prompt_template": "default",
+        "focus_areas": ["security", "performance", "code_quality"]
+      },
+      
+      "review_rules": {
+        "severity_threshold": "ERROR",
+        "max_issues_per_file": 10,
+        "max_total_issues": 50,
+        "auto_block": false,
+        "require_approval": false
+      },
+      
+      "gitlab_config": {
+        "auto_comment": true,
+        "auto_label": true,
+        "auto_block": false,
+        "comment_template": "detailed",
+        "labels": {
+          "review_passed": "review-approved",
+          "review_failed": "review-needs-attention",
+          "review_warning": "review-warning"
+        },
+        "assign_reviewers": ["tech-lead", "senior-developer"]
+      },
+      
+      "notification_config": {
+        "enabled": true,
+        "channels": ["gitlab", "slack"],
+        "notify_on_success": false,
+        "notify_on_warning": true,
+        "notify_on_failure": true,
+        "slack_webhook": "https://hooks.slack.com/services/your-webhook"
+      },
+      
+      "custom_rules": {
+        "code_quality": {
+          "max_file_length": 1000,
+          "max_function_length": 100,
+          "max_complexity": 10,
+          "require_tests": true
+        },
+        "security": {
+          "check_sql_injection": true,
+          "check_xss": true,
+          "check_authentication": true,
+          "check_input_validation": true
+        },
+        "performance": {
+          "check_n_plus_1": true,
+          "check_memory_leaks": true,
+          "check_slow_queries": true,
+          "max_response_time": 1000
+        }
+      },
+      
+      "team_rules_path": "config/team_rules/web-app.json"
+    }
+  },
+  
+  "global_custom_rules": {
+    "common_standards": {
+      "naming_conventions": true,
+      "code_documentation": true,
+      "test_coverage": true,
+      "error_handling": true
+    },
+    "security_baseline": {
+      "check_credentials": true,
+      "check_data_encryption": true,
+      "check_input_validation": true,
+      "check_access_control": true
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "projects": [
+    {
+      "name": "主项目",
+      "description": "公司主要产品项目",
+      "project_id": 12345,
+      "gitlab_config": {
+        "url": "https://gitlab.com",
+        "token": "glpat-main-project-token"
+      },
+      "default_branches": ["main", "develop", "release"],
+      "team_email": "dev-team@company.com",
+      "manager_email": "pm@company.com"
+    },
+    {
+      "name": "移动应用",
+      "description": "iOS/Android移动应用",
+      "project_id": 67890,
+      "gitlab_config": {
+        "url": "https://gitlab.company.com",
+        "token": "glpat-mobile-project-token",
+        "verify_ssl": true,
+        "timeout": 60
+      },
+      "default_branches": ["main", "release"],
+      "team_email": "mobile-team@company.com",
+      "manager_email": "mobile-pm@company.com"
+    },
+    {
+      "name": "API服务",
+      "description": "后端API服务",
+      "project_id": 11111,
+      "gitlab_config": {
+        "url": "https://git.internal.company.com",
+        "token": "glpat-api-service-token",
+        "verify_ssl": false,
+        "timeout": 30
+      },
+      "default_branches": ["main", "staging"],
+      "team_email": "backend-team@company.com",
+      "manager_email": "backend-pm@company.com"
+    },
+    {
+      "name": "前端应用",
+      "description": "Web前端应用",
+      "project_id": 22222,
+      "gitlab_config": {
+        "url": "https://gitlab.example.org",
+        "token": "glpat-frontend-token"
+      },
+      "default_branches": ["main", "develop"],
+      "team_email": "frontend-team@company.com"
+    }
+  ],
+  "default_settings": {
+    "use_ai": true,
+    "output_format": "html",
+    "analysis_period_days": 30,
+    "include_branches": ["main", "develop", "release"],
+    "email_subject_template": "{project_name} 合并记录分析报告 - {start_date} 至 {end_date}",
+    "reports_directory": "reports"
+  },
+  "notification_settings": {
+    "send_email": true,
+    "email_from": "gitlab-analysis@company.com",
+    "cc_recipients": ["ops@company.com"],
+    "schedule": {
+      "daily": false,
+      "weekly": true,
+      "monthly": true
+    }
+  }
+}

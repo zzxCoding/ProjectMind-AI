@@ -1,0 +1,93 @@
+{
+  "projects": {
+    "93": {
+      "name": "核心业务系统",
+      "version_base_path": "database/versions",
+      "db_type_patterns": {
+        "mysql": [
+          "**/*.mysql.sql",
+          "**/mysql/**/*.sql",
+          "**/*.mysql",
+          "**/mysql/**/*.sql"
+        ],
+        "oracle": [
+          "**/*.oracle.sql",
+          "**/oracle/**/*.sql",
+          "**/*.oracle",
+          "**/oracle/**/*.sql"
+        ],
+        "db2": [
+          "**/*.db2.sql",
+          "**/db2/**/*.sql",
+          "**/*.db2",
+          "**/db2/**/*.sql"
+        ],
+        "default": [
+          "**/*.sql",
+          "**/sql/**/*.sql"
+        ]
+      },
+      "ai_analysis": {
+        "enable_thinking": false,
+        "model": "qwen:7b",
+        "max_file_size": 100000,
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_tokens": 2000,
+        "analysis_depth": "standard",
+        "focus_areas": [
+          "语法错误",
+          "性能问题",
+          "安全风险",
+          "逻辑异常",
+          "最佳实践"
+        ],
+        "custom_instructions": ""
+      }
+    },
+    "3145": {
+      "name": "企业管理系统",
+      "version_base_path": "scripts/database",
+      "db_type_patterns": {
+        "mysql": [
+          "**/*.mysql.sql",
+          "**/mysql/**/*.sql"
+        ],
+        "oracle": [
+          "**/*.oracle.sql",
+          "**/oracle/**/*.sql"
+        ],
+        "db2": [
+          "**/*.db2.sql",
+          "**/db2/**/*.sql"
+        ],
+        "default": [
+          "**/*.sql"
+        ]
+      },
+      "ai_analysis": {
+        "enable_thinking": false,
+        "model": "qwen:7b",
+        "max_file_size": 100000,
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_tokens": 2000,
+        "analysis_depth": "standard",
+        "focus_areas": [
+          "语法错误",
+          "性能问题",
+          "安全风险",
+          "逻辑异常"
+        ],
+        "custom_instructions": ""
+      }
+    }
+  },
+  "global_settings": {
+    "default_model": "qwen:7b",
+    "max_concurrent_files": 5,
+    "timeout_seconds": 300,
+    "output_formats": ["console", "text", "json"],
+    "report_levels": ["high", "medium", "low", "info"]
+  }
+}
