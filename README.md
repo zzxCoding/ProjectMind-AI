@@ -38,6 +38,8 @@ python-scripts/
 │   ├── notification_sender.py   # 多渠道通知系统
 │   ├── mr_review_engine.py      # GitLab MR审查引擎
 │   ├── gitlab_mr_interactor.py  # GitLab MR交互器
+│   ├── gitlab_branch_merge_pipeline.py # GitLab分支合并流水线
+│   ├── branch_creation_pipeline.py # GitLab分支创建流水线
 │   └── sql_project_scanner.py   # SQL项目扫描器
 ├── services/                    # 微服务架构
 │   ├── ollama_service.py        # AI分析HTTP服务
@@ -67,6 +69,8 @@ python3 data_analysis/performance_monitor.py --system --days 1
 - 🔍 **[SonarQube分析器](docs/sonarqube_analyzer_guide.md)** - 代码质量分析专项文档
 - 🔗 **[SonarQube集成指南](docs/sonarqube_integration_guide.md)** - SonarQube API集成详解
 - 🤖 **[GitLab MR自动审查](docs/mr_review_guide.md)** - 完整的MR自动审查系统使用指南
+- 🌿 **[GitLab分支创建流水线](docs/branch_creation_guide.md)** - 自动化版本分支创建工具使用指南
+- 🔀 **[GitLab分支合并流水线](docs/gitlab_branch_merge_guide.md)** - 自动化分支合并操作完整指南
 - 🗄️ **[SQL项目扫描器](docs/sql_scanner.md)** - 多数据库SQL文件AI异常扫描工具
 
 ## 🎯 主要功能
@@ -89,6 +93,7 @@ python3 data_analysis/performance_monitor.py --system --days 1
 - **报告生成** - 多格式报告（HTML/Markdown/JSON）
 - **通知系统** - 支持邮件、微信、钉钉等多渠道通知
 - **GitLab MR审查** - 自动化的合并请求代码审查，集成SonarQube和AI分析
+- **GitLab分支管理** - 自动化分支创建和合并流水线，支持版本发布和MR检查
 - **SQL项目扫描** - 版本发布前SQL文件异常扫描，支持多数据库类型和自定义AI模型
 
 ### 🌐 微服务架构
@@ -130,6 +135,12 @@ python3 shared/sonarqube_client.py --test connection
 # 测试MR审查功能
 python3 examples/mr_review_pipeline.py --project-id 123 --mr-iid 45 --log-level DEBUG
 
+# 测试GitLab分支创建
+python3 automation/branch_creation_pipeline.py --project-id 123 --source-branch develop --version v1.0.0
+
+# 测试GitLab分支合并
+python3 automation/gitlab_branch_merge_pipeline.py --project-id 123 --source-branch feature/test --target-branch main
+
 # 测试SQL扫描器
 python3 test_sql_scanner.py
 python3 automation/sql_project_scanner.py --project-id 93 --version-path "v2.1.*" --help
@@ -148,6 +159,7 @@ python3 script_name.py --log-level DEBUG
 
 ## 📝 更新日志
 
+- **v2.3** (2025-11-05) - 新增GitLab分支管理工具集，包含分支创建流水线和分支合并流水线，支持版本发布前的MR检查和WPS Webhook通知
 - **v2.2** (2024-09-22) - 新增SQL项目扫描器，支持多数据库SQL文件AI异常检测，自定义AI模型配置
 - **v2.1** (2024-09) - 新增GitLab MR自动审查系统，集成SonarQube和AI智能审查
 - **v2.0** (2024-01) - 重构版本，新增SonarQube分析和AI增强功能

@@ -7,6 +7,7 @@ GitLab客户端
 import os
 import sys
 import re
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import gitlab
@@ -1103,19 +1104,83 @@ class GitLabClient:
 
             # 执行合并
             self.logger.info(f"合并 MR !{merge_request_iid} 到 {mr.target_branch}")
+            self.logger.debug(f"合并参数: {merge_data}")
 
-            result = project.mergerequests.merge(merge_request_iid, **merge_data)
+            # 等待MR状态变为可合并
+            max_wait_time = 30  # 最多等待30秒
+            wait_interval = 2  # 每2秒检查一次
+            waited_time = 0
+
+            while mr.merge_status not in ['can_be_merged', 'cannot_be_merged'] and waited_time < max_wait_time:
+                self.logger.info(f"MR状态为 {mr.merge_status}，等待 {wait_interval} 秒后重新检查...")
+                time.sleep(wait_interval)
+                waited_time += wait_interval
+
+                # 刷新MR状态 - 重新获取MR对象
+                try:
+                    mr = project.mergerequests.get(merge_request_iid)
+                    self.logger.debug(f"更新后MR状态: {mr.merge_status}")
+                except Exception as refresh_error:
+                    self.logger.warning(f"刷新MR状态失败: {refresh_error}")
+
+            # 最后检查一次MR状态
+            self.logger.debug(f"合并前MR状态: {mr.merge_status}, 冲突: {mr.has_conflicts}")
+
+            if mr.merge_status != 'can_be_merged':
+                self.logger.error(f"MR状态不允许合并: {mr.merge_status} (等待了 {waited_time} 秒)")
+                return {
+                    'success': False,
+                    'error': f'MR状态不允许合并: {mr.merge_status} (等待了 {waited_time} 秒)',
+                    'mr_state': mr.merge_status,
+                    'waited_time': waited_time
+                }
+
+            # 尝试合并
+            try:
+                result = mr.merge(**merge_data)
+                self.logger.info(f"合并调用成功")
+            except Exception as merge_error:
+                self.logger.error(f"合并调用失败: {merge_error}")
+
+                # 尝试获取更详细的错误信息
+                try:
+                    error_details = mr.merge_request_error()
+                    self.logger.error(f"详细错误信息: {error_details}")
+                    return {
+                        'success': False,
+                        'error': f'{merge_error} - 详细错误: {error_details}'
+                    }
+                except Exception as error_check_error:
+                    self.logger.error(f"无法获取详细错误: {error_check_error}")
+                    return {
+                        'success': False,
+                        'error': str(merge_error)
+                    }
 
             # 格式化返回结果
+            # 刷新MR状态获取最新信息
+            try:
+                mr = project.mergerequests.get(merge_request_iid)
+            except Exception as final_refresh_error:
+                self.logger.warning(f"最终刷新MR状态失败: {final_refresh_error}")
+
             return_data = {
                 'success': True,
                 'iid': mr.iid,
                 'id': mr.id,
                 'title': mr.title,
-                'merged_at': result.merged_at if hasattr(result, 'merged_at') else None,
-                'state': result.state if hasattr(result, 'state') else 'merged',
-                'web_url': result.web_url if hasattr(result, 'web_url') else mr.web_url
+                'merged_at': mr.merged_at if hasattr(mr, 'merged_at') else None,
+                'state': mr.state,
+                'web_url': mr.web_url if hasattr(mr, 'web_url') else None,
+                'message': '合并成功'
             }
+
+            # 如果result有额外信息，也包含进去
+            if isinstance(result, dict):
+                return_data.update(result)
+            elif hasattr(result, 'merged_at'):
+                return_data['merged_at'] = result.merged_at
+                return_data['merge_sha'] = getattr(result, 'sha', None)
 
             self.logger.info(f"合并成功: !{mr.iid} -> {mr.target_branch}")
             return return_data
