@@ -20,7 +20,7 @@ sys.path.append(project_root)
 
 from shared.gitlab_client import GitLabClient
 from shared.utils import setup_logging
-from shared.file_lock import file_lock
+# from shared.file_lock import file_lock  # 移除锁机制
 
 
 class BranchCreationPipeline:
@@ -351,18 +351,18 @@ class BranchCreationPipeline:
             操作结果字典
         """
         start_time = time.time()
-        lock_name = f"branch_creation_{project_id}_{source_branch}_{version_name}"
+        # 分支锁 - 已移除，改为串行执行
+        # lock_name = f"branch_creation_{project_id}_{source_branch}_{version_name}"
 
-        # 获取锁，防止并发创建
-        with file_lock(lock_name, timeout=0) as locked:
-            if not locked:
-                return {
-                    'success': False,
-                    'error': '分支创建正在进行中',
-                    'execution_time': time.time() - start_time
-                }
+        # with file_lock(lock_name, timeout=60) as locked:
+        #     if not locked:
+        #         return {
+        #             'success': False,
+        #             'error': '分支创建正在进行中',
+        #             'execution_time': time.time() - start_time
+        #         }
 
-            try:
+        try:
                 self.logger.info(f"开始创建版本分支: {source_branch} -> {version_name}")
 
                 # 1. 验证分支名称
@@ -452,15 +452,15 @@ class BranchCreationPipeline:
                         'mr_check_result': mr_check_result
                     }
 
-            except Exception as e:
-                execution_time = time.time() - start_time
-                self.logger.error(f"创建版本分支失败: {e}")
+        except Exception as e:
+            execution_time = time.time() - start_time
+            self.logger.error(f"创建版本分支失败: {e}")
 
-                return {
-                    'success': False,
-                    'error': str(e),
-                    'execution_time': execution_time
-                }
+            return {
+                'success': False,
+                'error': str(e),
+                'execution_time': execution_time
+            }
 
     def batch_create_version_branches(self,
                                     project_id: str,
@@ -546,77 +546,77 @@ def main():
         print("❌ 请提供 --version 或使用 --batch-mode")
         sys.exit(1)
 
-    # 全局锁
-    global_lock_name = f"gitlab_branch_creation_global_{args.project_id}"
+    # 全局锁 - 已移除，改为串行执行
+    # global_lock_name = f"gitlab_branch_creation_global_{args.project_id}"
 
-    with file_lock(global_lock_name, timeout=args.lock_timeout) as locked:
-        if not locked:
-            print("❌ GitLab分支创建流水线正在运行，请稍后再试")
-            sys.exit(1)
+    # with file_lock(global_lock_name, timeout=args.lock_timeout) as locked:
+    #     if not locked:
+    #         print("❌ GitLab分支创建流水线正在运行，请稍后再试")
+    #         sys.exit(1)
 
-        try:
-            # 创建流水线实例
-            pipeline = BranchCreationPipeline(
-                log_level=args.log_level,
-                webhook_url=args.webhook_url,
-                webhook_method=args.webhook_method,
-                webhook_origin=args.webhook_origin,
-                webhook_custom_json=args.webhook_json
+    try:
+        # 创建流水线实例
+        pipeline = BranchCreationPipeline(
+            log_level=args.log_level,
+            webhook_url=args.webhook_url,
+            webhook_method=args.webhook_method,
+            webhook_origin=args.webhook_origin,
+            webhook_custom_json=args.webhook_json
+        )
+
+        if args.batch_mode:
+            # 批量模式
+            versions = []
+
+            if args.versions_file:
+                # 从文件读取版本列表
+                with open(args.versions_file, 'r') as f:
+                    versions = [line.strip() for line in f if line.strip()]
+            else:
+                # 从标准输入读取版本列表
+                print("请输入要创建的版本列表（每行一个版本）：")
+                versions = [line.strip() for line in sys.stdin if line.strip()]
+
+            if not versions:
+                print("❌ 未提供版本列表")
+                sys.exit(1)
+
+            results = pipeline.batch_create_version_branches(
+                project_id=args.project_id,
+                source_branch=args.source_branch,
+                version_list=versions,
+                pattern_type=args.pattern_type,
+                force_create=args.force_create
             )
 
-            if args.batch_mode:
-                # 批量模式
-                versions = []
+            # 打印结果
+            print(f"\n📊 批量创建完成，共 {len(results)} 个版本")
+            success_count = sum(1 for r in results if r['success'])
+            print(f"成功: {success_count}, 失败: {len(results) - success_count}")
 
-                if args.versions_file:
-                    # 从文件读取版本列表
-                    with open(args.versions_file, 'r') as f:
-                        versions = [line.strip() for line in f if line.strip()]
+            for result in results:
+                if result['success']:
+                    print(f"  ✅ {result['version_branch']} (commit: {result['commit_short']})")
                 else:
-                    # 从标准输入读取版本列表
-                    print("请输入要创建的版本列表（每行一个版本）：")
-                    versions = [line.strip() for line in sys.stdin if line.strip()]
+                    print(f"  ❌ {result.get('version_branch', '未知')} - {result.get('error', 'Unknown error')}")
 
-                if not versions:
-                    print("❌ 未提供版本列表")
-                    sys.exit(1)
+        else:
+            # 单版本模式
+            result = pipeline.create_version_branch(
+                project_id=args.project_id,
+                source_branch=args.source_branch,
+                version_name=args.version,
+                pattern_type=args.pattern_type,
+                force_create=args.force_create,
+                check_open_mrs=not args.skip_mr_check
+            )
 
-                results = pipeline.batch_create_version_branches(
-                    project_id=args.project_id,
-                    source_branch=args.source_branch,
-                    version_list=versions,
-                    pattern_type=args.pattern_type,
-                    force_create=args.force_create
-                )
+            # 打印结果
+            print_result(result)
 
-                # 打印结果
-                print(f"\n📊 批量创建完成，共 {len(results)} 个版本")
-                success_count = sum(1 for r in results if r['success'])
-                print(f"成功: {success_count}, 失败: {len(results) - success_count}")
-
-                for result in results:
-                    if result['success']:
-                        print(f"  ✅ {result['version_branch']} (commit: {result['commit_short']})")
-                    else:
-                        print(f"  ❌ {result.get('version_branch', '未知')} - {result.get('error', 'Unknown error')}")
-
-            else:
-                # 单版本模式
-                result = pipeline.create_version_branch(
-                    project_id=args.project_id,
-                    source_branch=args.source_branch,
-                    version_name=args.version,
-                    pattern_type=args.pattern_type,
-                    force_create=args.force_create,
-                    check_open_mrs=not args.skip_mr_check
-                )
-
-                # 打印结果
-                print_result(result)
-
-        except Exception as e:
-            logger.error(f"流水线执行失败: {e}")
-            sys.exit(1)
+    except Exception as e:
+        logger.error(f"流水线执行失败: {e}")
+        sys.exit(1)
 
 
 def print_result(result):
