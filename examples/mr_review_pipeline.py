@@ -47,28 +47,30 @@ class MRReviewPipeline:
         else:
             return f"mr_review_{operation}"
     
-    def __init__(self, config: Optional[ReviewConfig] = None, log_level: str = 'INFO', ai_temperature: Optional[float] = None):
+    def __init__(self, config: Optional[ReviewConfig] = None, log_level: str = 'INFO', ai_temperature: Optional[float] = None, thread_count: int = 2):
         """
         初始化审查流水线
-        
+
         Args:
             config: 审查配置
             log_level: 日志级别
             ai_temperature: AI温度参数
+            thread_count: AI分析并发线程数，默认为2
         """
         self.config = config or get_default_config()
         self.logger = setup_logging(level=log_level)
-        
+
         # 初始化各个组件
         self.gitlab_client = GitLabClient()
         self.ollama_client = OllamaClient()
-        
+
         # 初始化核心引擎
         self.review_engine = MRReviewEngine(
             gitlab_client=self.gitlab_client,
             ollama_client=self.ollama_client,
             log_level=log_level,
-            ai_temperature=ai_temperature
+            ai_temperature=ai_temperature,
+            thread_count=thread_count
         )
         
         # 初始化结果处理器

@@ -66,20 +66,23 @@ class ReviewResult:
 class MRReviewEngine:
     """MR 自动审查引擎"""
     
-    def __init__(self, 
+    def __init__(self,
                  gitlab_client: Optional[GitLabClient] = None,
                  ollama_client: Optional[OllamaClient] = None,
                  log_level: str = 'INFO',
-                 ai_temperature: Optional[float] = None):
+                 ai_temperature: Optional[float] = None,
+                 thread_count: int = 2):
         """
         初始化审查引擎
-        
+
         Args:
             gitlab_client: GitLab客户端
             ollama_client: Ollama客户端
             log_level: 日志级别
             ai_temperature: AI温度参数
+            thread_count: AI分析并发线程数，默认为2
         """
+        self.thread_count = thread_count
         # 存储当前审查的分析详情
         self.current_analysis_details = None
         self.gitlab_client = gitlab_client or GitLabClient()
@@ -369,14 +372,14 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
             'analyzed_files': [],
             'total_files': len(changes),
             'total_issues': 0,
-            'thread_count': 3
+            'thread_count': self.thread_count
         }
-        
+
         try:
-            self.logger.debug(f"开始语法和逻辑分析，变更数量: {len(changes)}")
-            
+            self.logger.debug(f"开始语法和逻辑分析，变更数量: {len(changes)}, 使用线程数: {self.thread_count}")
+
             # 使用线程池管理器进行并发分析
-            thread_pool_manager = ThreadPoolManager(max_workers=3, logger=self.logger)
+            thread_pool_manager = ThreadPoolManager(max_workers=self.thread_count, logger=self.logger)
             
             # 使用线程池并发分析文件
             issues, analysis_details_list = thread_pool_manager.analyze_files_concurrently(
@@ -441,7 +444,7 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
 
 ### 复核任务
 - 仅根据提示词要求判断每条问题是否合规。
-- 若问题符合要求，标记为“保留”；若不符合，标记为“剔除”并给出中文原因。
+- 若问题符合要求，标记为"保留"；若不符合，标记为"剔除"并给出中文原因。
 - 不允许新增问题或修改原有内容。
 
 ### 输出格式
@@ -461,11 +464,26 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
 - 禁止输出额外文字、解释或代码块。
 """
 
+        # 配置AI参数以获得确定性输出
+        options = {}
+        if self.ai_temperature is not None:
+            options['temperature'] = self.ai_temperature
+        else:
+            # 设置温度为0以获得确定性输出
+            options['temperature'] = 0.0
+
+        options['top_p'] = 0.7
+        options['repeat_penalty'] = 1.05
+
+        # 对于OpenAI兼容API，设置do_sample=false确保确定性输出
+        options['do_sample'] = False
+
         verification_result = self._run_ai_analysis_with_fallback(
             prompt=verification_prompt,
             parse_function=self._parse_issue_verification_response,
             parse_args=(target_indexes,),
             stage_label='AI问题复核',
+            options=options if options else None,
             reinforcement_instructions='请严格复核问题是否符合原提示词，按照要求输出JSON。'
         )
 
@@ -851,9 +869,15 @@ Type: {change_type}
             options = {}
             if self.ai_temperature is not None:
                 options['temperature'] = self.ai_temperature
-                options['top_k'] = 25
-                options['top_p'] = 0.5
-                options['repeat_penalty'] = 1.1
+            else:
+                # 设置温度为0以获得确定性输出，避免随机性导致结果不一致
+                options['temperature'] = 0.0
+
+            options['top_p'] = 0.7
+            options['repeat_penalty'] = 1.05
+
+            # 对于OpenAI API，设置do_sample=false确保确定性输出（Ollama会自动忽略此参数）
+            options['do_sample'] = False
 
             syntax_issues = self._run_ai_analysis_with_fallback(
                 prompt=syntax_prompt,
@@ -1207,6 +1231,12 @@ For minor issues (WARNING/INFO), return empty suggestions.
             options = {}
             if self.ai_temperature is not None:
                 options['temperature'] = self.ai_temperature
+            else:
+                # 设置温度为0以获得确定性输出
+                options['temperature'] = 0.0
+
+            # 对于OpenAI API，设置do_sample=false确保确定性输出（Ollama会自动忽略此参数）
+            options['do_sample'] = False
 
             summary_issues = self._run_ai_analysis_with_fallback(
                 prompt=summary_prompt,

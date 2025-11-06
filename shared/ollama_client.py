@@ -174,15 +174,33 @@ class OllamaClient:
                 result = self._call_openai_api(messages, model, options, format)
 
             else:
-                # Ollama 模式
+                # Ollama 模式 - 过滤掉Ollama不支持的参数
+                ollama_options = None
+                if options:
+                    # Ollama支持的参数列表
+                    ollama_supported = {
+                        'temperature', 'top_p', 'top_k', 'repeat_penalty',
+                        'num_predict', 'seed', 'stop'
+                    }
+                    # 过滤掉不支持的参数（如 do_sample, presence_penalty 等 OpenAI 特有参数）
+                    ollama_options = {k: v for k, v in options.items() if k in ollama_supported}
+
+                    # 详细日志记录参数过滤过程
+                    if self.debug_mode:
+                        self.logger.debug(f"原始参数: {options}")
+                        if len(options) != len(ollama_options):
+                            removed_params = set(options.keys()) - set(ollama_options.keys())
+                            self.logger.debug(f"移除Ollama不支持的参数: {removed_params}")
+                        self.logger.debug(f"过滤后参数: {ollama_options}")
+
                 payload = {
                     'model': model,
                     'prompt': prompt,
                     'stream': stream
                 }
 
-                if options:
-                    payload['options'] = options
+                if ollama_options:
+                    payload['options'] = ollama_options
 
                 if format:
                     payload['format'] = format
@@ -233,15 +251,33 @@ class OllamaClient:
                 result = self._call_openai_api(messages, model, options)
 
             else:
-                # Ollama 模式
+                # Ollama 模式 - 过滤掉Ollama不支持的参数
+                ollama_options = None
+                if options:
+                    # Ollama支持的参数列表
+                    ollama_supported = {
+                        'temperature', 'top_p', 'top_k', 'repeat_penalty',
+                        'num_predict', 'seed', 'stop'
+                    }
+                    # 过滤掉不支持的参数（如 do_sample, presence_penalty 等 OpenAI 特有参数）
+                    ollama_options = {k: v for k, v in options.items() if k in ollama_supported}
+
+                    # 详细日志记录参数过滤过程
+                    if self.debug_mode:
+                        self.logger.debug(f"原始参数: {options}")
+                        if len(options) != len(ollama_options):
+                            removed_params = set(options.keys()) - set(ollama_options.keys())
+                            self.logger.debug(f"移除Ollama不支持的参数: {removed_params}")
+                        self.logger.debug(f"过滤后参数: {ollama_options}")
+
                 payload = {
                     'model': model,
                     'messages': messages,
                     'stream': stream
                 }
 
-                if options:
-                    payload['options'] = options
+                if ollama_options:
+                    payload['options'] = ollama_options
 
                 response = self._make_request('POST', 'chat', json=payload)
 
@@ -306,15 +342,32 @@ class OllamaClient:
 
         # 处理options参数（Ollama风格 -> OpenAI风格）
         if options:
+            # 标准OpenAI参数映射
             if 'temperature' in options:
                 payload['temperature'] = options['temperature']
             if 'top_p' in options:
                 payload['top_p'] = options['top_p']
             if 'max_tokens' in options:
                 payload['max_tokens'] = options['max_tokens']
-            # repeat_penalty -> frequency_penalty (近似映射)
+            # repeat_penalty -> frequency_penalty (保守映射)
+            # repeat_penalty: 1.0-2.0 → frequency_penalty: 0-1.0 (使用1:1映射，更保守)
             if 'repeat_penalty' in options:
-                payload['frequency_penalty'] = (options['repeat_penalty'] - 1.0) * 2.0
+                frequency_penalty = options['repeat_penalty'] - 1.0
+                # 限制在OpenAI的推荐范围内 (0-1.0)
+                payload['frequency_penalty'] = min(max(frequency_penalty, 0.0), 1.0)
+
+            # 支持OpenAI兼容服务的扩展参数（如vLLM、FastChat等）
+            # 这些参数会被传递给API，如果服务不支持会被忽略
+            extended_params = ['do_sample', 'presence_penalty', 'top_k', 'seed', 'stop']
+            extended_used = []
+            for param in extended_params:
+                if param in options:
+                    payload[param] = options[param]
+                    extended_used.append(f"{param}={options[param]}")
+
+            # Debug模式记录扩展参数使用情况
+            if extended_used and self.debug_mode:
+                self.logger.debug(f"传递扩展参数到OpenAI兼容API: {', '.join(extended_used)}")
 
         # 如果options中没有temperature，使用默认值
         if 'temperature' not in payload:
