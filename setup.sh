@@ -192,12 +192,26 @@ SONARQUBE_PROJECT_KEY=
 SONARQUBE_TIMEOUT=30
 SONARQUBE_VERIFY_SSL=true
 
-# Ollama AI配置（可选）
+# LLM 后端配置
+# 可选值: ollama | openai
+LLM_BACKEND=ollama
+
+# Ollama AI配置（当 LLM_BACKEND=ollama 时生效）
 OLLAMA_ENABLED=false
 OLLAMA_HOST=localhost
 OLLAMA_PORT=11434
 OLLAMA_MODEL=llama2
 OLLAMA_TIMEOUT=30
+OLLAMA_DEBUG=false
+
+# OpenAI API配置（当 LLM_BACKEND=openai 时生效）
+# 支持标准OpenAI API以及兼容服务（如vLLM、FastChat、通义千问等）
+OPENAI_API_BASE=http://localhost:8000/v1
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_TIMEOUT=60
+OPENAI_MAX_TOKENS=4096
+OPENAI_TEMPERATURE=0.7
 
 # 邮件通知配置（可选）
 EMAIL_ENABLED=false

@@ -112,8 +112,8 @@ class MRReviewEngine:
             ]
         }
 
-        # 首次AI提示词关键规则，用于复用与复核
-        self.ai_issue_prompt_instructions = """
+        # AI 分析规则上半部分（无输出格式要求），用于汇总分析
+        self.ai_summary_instructions = """
 ## Role
 You are a highly-specialized Static Code Analysis Engine and expert Code Reviewer.
 
@@ -128,20 +128,20 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
 2.  Prioritize findings based on a strict severity hierarchy (Critical, High, Low).
 3.  Filter out low-priority issues and a comprehensive list of known false positives related to specific frameworks and enterprise contexts.
 4.  Report only valid, high-impact issues.
-5.  Format the final report into a specific JSON structure with content in Chinese.
 
 ## Constraints
 
 ### General Rules
 -   **Analyze Diff, Not Full File**: The input is a diff, not a complete file. Make reasonable judgments about incomplete code fragments based on programming knowledge.
 -   **Ignore Compilation Errors**: Do not report compilation errors, as fragments may be valid within the full file context.
--   **Focus on Added Code**: Your analysis should primarily focus on the `[新增]` lines (added lines). `[删除]` (removed) and `[上下文]` (context) lines are for reference only.
+-   **Focus on Added Code**: Your analysis should primarily focus on the `[新增]` lines (added lines). This is the core of the change - examine these lines carefully and critically. `[删除]` (removed) and `[上下文]` (context) lines are for reference only.
+-   **Context Lines Are Reference**: `[上下文]` lines are provided for understanding surrounding code. DO NOT report issues in context lines unless they represent CRITICAL severity problems (security vulnerabilities, memory leaks, data breaches). The edge of context lines may be truncated by diff, so ignore any truncated portions.
 -   **Do Not Report Duplicates from Context**: Do not report "duplicate code" based on context lines in the diff, as this is a common artifact of the diff format.
 
 ### Issue Prioritization
 -   **CRITICAL PRIORITY (Must Report)**:
     -   **Memory Leaks**: Static collections that grow indefinitely, unclosed resources, connection leaks.
-    -   **Security Vulnerabilities**: SQL injection, hardcoded credentials, authentication bypass, critical security flaws.
+    -   **Security Vulnerabilities**: Hardcoded credentials, authentication bypass, critical security flaws.
     -   **Critical Runtime Errors**: Null pointer exceptions, division by zero, infinite loops.
 -   **HIGH PRIORITY (Should Report)**:
     -   **Resource Management**: File handles or database connections not properly closed (unless managed by a framework as specified below).
@@ -149,8 +149,10 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
     -   **Logic Errors**: Flaws in business logic that produce demonstrably incorrect results.
 -   **LOW PRIORITY (Must Ignore)**:
     -   Code style, formatting, and comment suggestions.
-    -   Variable naming conventions.
+    -   Variable naming conventions (including camelCase to snake_case conversions).
     -   Minor refactoring suggestions for code clarity or simplicity.
+    -   **SQL Injection**: Do NOT report SQL injection concerns. The codebase uses parameterized queries and ORM frameworks that handle SQL injection prevention.
+    -   **Speculative Issues**: Do NOT report issues based on speculation or assumptions without concrete evidence. For example, reporting that "renaming a parameter might break dependencies" without analyzing the actual usage.
 
 ### File-Type Specific Rules
 -   **SQL Files (.sql)**: Be extremely conservative. Only report definitive SQL syntax errors (e.g., missing semicolons, unclosed quotes). Do NOT make assumptions about ORM frameworks.
@@ -183,38 +185,6 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
 
 ## Input
 -   A string containing a code diff in GitLab format, using `[新增]`, `[删除]`, and `[上下文]` markers.
-
-## Output Instructions
--   **格式**: 必须直接返回一个合法的 JSON 对象，禁止使用 ``` 包裹。
--   **内容**: JSON 中所有字符串字段必须使用中文表述。
--   **唯一性**: 不得在 JSON 前后添加说明文字或额外内容。
-
-### JSON Schema
-{{
-    "errors": [
-        {{
-            "type": "语法错误|逻辑错误|类型错误|运行时错误",
-            "description": "错误描述",
-            "line_number": 行号（如果能确定）, 
-            "suggestion": "修复建议"
-        }}
-    ]
-}}
-
-### 示例
--   **存在问题时**: {{"errors": [{{"type": "逻辑错误", "description": "在循环内部创建数据库连接，可能导致性能问题和连接耗尽", "line_number": 42, "suggestion": "将数据库连接的创建和关闭移到循环外部。"}}]}}
--   **无问题时**: {{"errors": []}}
-
-## Workflow
-1.  Receive and parse the input GitLab diff string.
-2.  Identify the file type to apply specific rules.
-3.  Analyze the `[新增]` lines, using `[删除]` and `[上下文]` lines for full context.
-4.  For each potential issue, classify its severity according to the `Issue Prioritization` rules.
-5.  Systematically check each potential issue against the comprehensive list of `Framework & Context Rules (False Positives)`.
-6.  Discard any issue that is classified as LOW PRIORITY or matches a false positive rule.
-7.  For all remaining valid issues, gather the required information: type, description, line number, and a suggested fix.
-8.  Construct the final JSON object according to the `Output Instructions`, ensuring all text is in Chinese.
-9.  Return only the raw JSON object as the final response.
 """
 
         # 需要复核的AI问题来源
@@ -462,9 +432,9 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
         issue_overview = "\n\n".join(issue_entries)
 
         verification_prompt = f"""
-{self.ai_issue_prompt_instructions}
+{self.ai_summary_instructions}
 
-请注意：以上内容即为第一次AI分析使用的提示词要求。现在无需重新分析代码，请对下方问题列表进行复核，判断每条问题是否符合上述要求。
+请注意：以上内容即为第一次AI分析使用的规则要求。现在无需重新分析代码，请对下方问题列表进行复核，判断每条问题是否符合上述要求。
 
 ### 待复核问题列表（序号为1-based索引）
 {issue_overview}
@@ -826,6 +796,42 @@ You are a highly-specialized Static Code Analysis Engine and expert Code Reviewe
             
             # 构建语法检查提示
             context_section = f"Context Hint: {context_hint}\n\n" if context_hint else ""
+
+            # 输出格式和工作流程部分
+            output_section = """
+## Output Instructions
+-   **格式**: 必须直接返回一个合法的 JSON 对象，禁止使用 ``` 包裹。
+-   **内容**: JSON 中所有字符串字段必须使用中文表述。
+-   **唯一性**: 不得在 JSON 前后添加说明文字或额外内容。
+
+### JSON Schema
+{{
+    "errors": [
+        {{
+            "type": "语法错误|逻辑错误|类型错误|运行时错误",
+            "description": "错误描述",
+            "line_number": 行号（如果能确定）,
+            "suggestion": "修复建议"
+        }}
+    ]
+}}
+
+### 示例
+-   **存在问题时**: {{"errors": [{{"type": "逻辑错误", "description": "在循环内部创建数据库连接，可能导致性能问题和连接耗尽", "line_number": 42, "suggestion": "将数据库连接的创建和关闭移到循环外部。"}}]}}
+-   **无问题时**: {{"errors": []}}
+
+## Workflow
+1.  Receive and parse the input GitLab diff string.
+2.  Identify the file type to apply specific rules.
+3.  Analyze the `[新增]` lines, using `[删除]` and `[上下文]` lines for full context.
+4.  For each potential issue, classify its severity according to the `Issue Prioritization` rules.
+5.  Systematically check each potential issue against the comprehensive list of `Framework & Context Rules (False Positives)`.
+6.  Discard any issue that is classified as LOW PRIORITY or matches a false positive rule.
+7.  For all remaining valid issues, gather the required information: type, description, line number, and a suggested fix.
+8.  Construct the final JSON object according to the `Output Instructions`, ensuring all text is in Chinese.
+9.  Return only the raw JSON object as the final response.
+"""
+
             syntax_prompt = f"""
 Analyze {file_type} code for issues:
 
@@ -836,7 +842,9 @@ Type: {change_type}
 {code}
 ```
 
-{self.ai_issue_prompt_instructions}
+{self.ai_summary_instructions}
+
+{output_section}
 """
             
             # 调用AI进行语法检查
@@ -852,8 +860,7 @@ Type: {change_type}
                 parse_function=self._parse_syntax_analysis_response,
                 parse_args=(file_path,),
                 stage_label='代码语法分析',
-                options=options if options else None,
-                reinforcement_instructions='请重点关注新增代码中的高风险问题，宁可标记为疑似也不要遗漏。'
+                options=options if options else None
             )
 
             issues.extend(syntax_issues)
@@ -1104,12 +1111,20 @@ Type: {change_type}
                 self.logger.debug(f"AI返回了 {len(response_data)} 个问题")
                 for item in response_data:
                     try:
+                        # 确保 file_path 是字符串类型
+                        file_path_value = item.get('file_path')
+                        if isinstance(file_path_value, list):
+                            # 如果是列表，取第一个元素或转换为字符串
+                            file_path_value = file_path_value[0] if file_path_value else None
+                        elif file_path_value is not None and not isinstance(file_path_value, str):
+                            file_path_value = str(file_path_value)
+
                         issue = ReviewIssue(
                             severity=ReviewSeverity(item.get('severity', 'INFO')),
                             category=item.get('category', 'ai_review'),
                             title=item.get('title', 'Unknown issue'),
                             description=item.get('description', ''),
-                            file_path=item.get('file_path'),
+                            file_path=file_path_value,
                             line_number=item.get('line_number'),
                             suggestion=item.get('suggestion', ''),
                             source='ai_review'
@@ -1183,7 +1198,7 @@ For minor issues (WARNING/INFO), return empty suggestions.
 **严格要求**：
 - 所有输出必须使用中文
 - 只针对CRITICAL/ERROR级别问题提供建议
-- 如果只有WARNING/INFO问题，返回空数组：{"suggestions": []}
+- 如果只有WARNING/INFO问题，返回空数组：{{"suggestions": []}}
 - 不要提供通用的最佳实践建议
 - 专注于实际需要修复的问题
 """
@@ -1850,7 +1865,15 @@ For minor issues (WARNING/INFO), return empty suggestions.
             
             # 记录受影响文件
             if issue.file_path:
-                summary['files_affected'].add(issue.file_path)
+                # 确保 file_path 是字符串类型（防御性编程）
+                if isinstance(issue.file_path, str):
+                    summary['files_affected'].add(issue.file_path)
+                elif isinstance(issue.file_path, list) and issue.file_path:
+                    # 如果是列表，取第一个元素
+                    summary['files_affected'].add(issue.file_path[0])
+                else:
+                    # 其他类型转换为字符串
+                    summary['files_affected'].add(str(issue.file_path))
         
         summary['files_affected'] = len(summary['files_affected'])
         

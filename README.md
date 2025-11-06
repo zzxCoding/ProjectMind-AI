@@ -54,18 +54,19 @@ python-scripts/
 
 ### 5分钟快速体验
 ```bash
-# 1. 安装依赖
-cd /Users/xuan/worksapce/manager/backend/python-scripts
-pip install -r requirements.txt
+# 1. 一键配置环境（创建虚拟环境、安装依赖、生成配置模板）
+./setup.sh
 
-# 2. 快速测试
-python3 shared/database_client.py --test connection
-python3 data_analysis/performance_monitor.py --system --days 1
+# 2. 激活虚拟环境
+source activate.sh
+
+# 3. 测试GitLab MR审查（使用真实的MR数据进行AI代码审查）
+python3 examples/mr_review_pipeline.py --project-id 93 --mr-iid 7078 --test-mode
 ```
 
 ### 详细指南
-- 📖 **[快速开始指南](QUICK_START.md)** - 5分钟快速体验和常用命令
 - 📚 **[详细项目指南](docs/PROJECT_GUIDE.md)** - 完整功能介绍和使用手册
+- 🤖 **[OpenAI API集成指南](docs/openai_integration_guide.md)** - OpenAI兼容API替代Ollama的配置和使用
 - 🔍 **[SonarQube分析器](docs/sonarqube_analyzer_guide.md)** - 代码质量分析专项文档
 - 🔗 **[SonarQube集成指南](docs/sonarqube_integration_guide.md)** - SonarQube API集成详解
 - 🤖 **[GitLab MR自动审查](docs/mr_review_guide.md)** - 完整的MR自动审查系统使用指南
@@ -159,6 +160,7 @@ python3 script_name.py --log-level DEBUG
 
 ## 📝 更新日志
 
+- **v2.4** (2025-11-05) - 新增OpenAI兼容API支持，可在Ollama和OpenAI API之间灵活切换，零业务代码改动，支持多种兼容服务（vLLM、FastChat、通义千问等）
 - **v2.3** (2025-11-05) - 新增GitLab分支管理工具集，包含分支创建流水线和分支合并流水线，支持版本发布前的MR检查和WPS Webhook通知
 - **v2.2** (2024-09-22) - 新增SQL项目扫描器，支持多数据库SQL文件AI异常检测，自定义AI模型配置
 - **v2.1** (2024-09) - 新增GitLab MR自动审查系统，集成SonarQube和AI智能审查

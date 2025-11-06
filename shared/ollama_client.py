@@ -20,19 +20,41 @@ setup_environment()
 from shared.utils import setup_logging
 
 class OllamaClient:
-    """Ollama客户端"""
-    
+    """
+    LLM客户端（支持Ollama和OpenAI兼容API）
+
+    通过环境变量 LLM_BACKEND 控制使用哪个后端：
+    - ollama: 使用本地Ollama服务
+    - openai: 使用OpenAI兼容API
+    """
+
     def __init__(self, config: Optional[OllamaConfig] = None):
         """
-        初始化Ollama客户端
-        
+        初始化LLM客户端
+
         Args:
-            config: Ollama配置，默认从环境变量获取
+            config: Ollama配置，默认从环境变量获取（仅在backend=ollama时使用）
         """
-        self.config = config or OllamaConfig.from_env()
+        # 检测后端类型
+        self.backend = os.getenv('LLM_BACKEND', 'ollama').lower()
         self.logger = setup_logging()
-        self.session = requests.Session()
-        self.session.timeout = self.config.timeout
+
+        if self.backend == 'openai':
+            # OpenAI API 模式
+            from config.openai_config import OpenAIConfig
+            self.openai_config = OpenAIConfig.from_env()
+            self.config = None  # OpenAI 模式下不使用 OllamaConfig
+            self.session = requests.Session()
+            self.session.timeout = self.openai_config.timeout
+            self.logger.info(f"使用 OpenAI API 后端: {self.openai_config.api_base}")
+        else:
+            # Ollama 模式
+            self.config = config or OllamaConfig.from_env()
+            self.openai_config = None
+            self.session = requests.Session()
+            self.session.timeout = self.config.timeout
+            self.logger.info(f"使用 Ollama 后端: {self.config.get_base_url()}")
+
         self.debug_mode = os.getenv('OLLAMA_DEBUG', 'false').lower() == 'true'
     
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
@@ -127,100 +149,127 @@ class OllamaClient:
                 stream: bool = False, enable_thinking: bool = False,
                 format: Optional[str] = None) -> Dict[str, Any]:
         """
-        生成文本
+        生成文本（支持Ollama和OpenAI后端）
 
         Args:
             model: 模型名称
             prompt: 输入提示
             options: 生成选项
-            stream: 是否流式输出
+            stream: 是否流式输出（注意：OpenAI模式暂不支持）
             enable_thinking: 是否启用思考过程输出
             format: 输出格式，可选'json'强制输出JSON格式
 
         Returns:
             生成结果
         """
-        payload = {
-            'model': model,
-            'prompt': prompt,
-            'stream': stream
-        }
-
-        if options:
-            payload['options'] = options
-
-        if format:
-            payload['format'] = format
-        
         try:
-            response = self._make_request('POST', 'generate', json=payload)
-            
-            if stream:
-                return self._handle_stream_response(response)
+            # 路由到不同的后端
+            if self.backend == 'openai':
+                # OpenAI API 模式
+                if stream:
+                    self.logger.warning("OpenAI 后端暂不支持流式输出，使用非流式模式")
+
+                # 将 prompt 转换为 messages 格式
+                messages = [{'role': 'user', 'content': prompt}]
+                result = self._call_openai_api(messages, model, options, format)
+
             else:
-                result = response.json()
-                # 如果不启用思考过程，清理输出中的think标签内容
-                if not enable_thinking:
-                    if 'response' in result:
-                        result['response'] = self._clean_thinking_output(result['response'])
-                        # Debug模式打印清理后的response内容
-                        if self.debug_mode:
-                            self.logger.debug(f"清理后的response内容: {result['response'][:500]}...")
-                return result
+                # Ollama 模式
+                payload = {
+                    'model': model,
+                    'prompt': prompt,
+                    'stream': stream
+                }
+
+                if options:
+                    payload['options'] = options
+
+                if format:
+                    payload['format'] = format
+
+                response = self._make_request('POST', 'generate', json=payload)
+
+                if stream:
+                    return self._handle_stream_response(response)
+                else:
+                    result = response.json()
+
+            # 统一的思考过程清理
+            if not enable_thinking and 'response' in result:
+                result['response'] = self._clean_thinking_output(result['response'])
+                # Debug模式打印清理后的response内容
+                if self.debug_mode:
+                    self.logger.debug(f"清理后的response内容: {result['response'][:500]}...")
+
+            return result
+
         except Exception as e:
-            self.logger.error(f"文本生成失败: {e}")
+            self.logger.error(f"文本生成失败 ({self.backend} 后端): {e}")
             return {'error': str(e)}
     
-    def chat(self, model: str, messages: List[Dict[str, str]], 
+    def chat(self, model: str, messages: List[Dict[str, str]],
              options: Optional[Dict] = None, stream: bool = False, enable_thinking: bool = False) -> Dict[str, Any]:
         """
-        聊天对话
-        
+        聊天对话（支持Ollama和OpenAI后端）
+
         Args:
             model: 模型名称
             messages: 消息列表
             options: 生成选项
-            stream: 是否流式输出
+            stream: 是否流式输出（注意：OpenAI模式暂不支持）
             enable_thinking: 是否启用思考过程输出
-            
+
         Returns:
             对话结果
         """
-        payload = {
-            'model': model,
-            'messages': messages,
-            'stream': stream
-        }
-        
-        if options:
-            payload['options'] = options
-        
         try:
-            response = self._make_request('POST', 'chat', json=payload)
-            
-            if stream:
-                return self._handle_stream_response(response)
+            # 路由到不同的后端
+            if self.backend == 'openai':
+                # OpenAI API 模式
+                if stream:
+                    self.logger.warning("OpenAI 后端暂不支持流式输出，使用非流式模式")
+
+                # 直接使用 messages（已经是OpenAI格式）
+                result = self._call_openai_api(messages, model, options)
+
             else:
-                result = response.json()
-                # 如果不启用思考过程，清理输出中的think标签内容
-                if not enable_thinking:
-                    if 'response' in result:
-                        result['response'] = self._clean_thinking_output(result['response'])
-                        # Debug模式打印清理后的response内容
-                        if self.debug_mode:
-                            self.logger.debug(f"清理后的response内容: {result['response'][:500]}...")
-                return result
+                # Ollama 模式
+                payload = {
+                    'model': model,
+                    'messages': messages,
+                    'stream': stream
+                }
+
+                if options:
+                    payload['options'] = options
+
+                response = self._make_request('POST', 'chat', json=payload)
+
+                if stream:
+                    return self._handle_stream_response(response)
+                else:
+                    result = response.json()
+
+            # 统一的思考过程清理
+            if not enable_thinking and 'response' in result:
+                result['response'] = self._clean_thinking_output(result['response'])
+                # Debug模式打印清理后的response内容
+                if self.debug_mode:
+                    self.logger.debug(f"清理后的response内容: {result['response'][:500]}...")
+
+            return result
+
         except Exception as e:
-            self.logger.error(f"聊天对话失败: {e}")
+            self.logger.error(f"聊天对话失败 ({self.backend} 后端): {e}")
             return {'error': str(e)}
     
     def _handle_stream_response(self, response: requests.Response) -> Iterator[Dict[str, Any]]:
         """
         处理流式响应
-        
+
         Args:
             response: 响应对象
-            
+
         Yields:
             响应数据片段
         """
@@ -231,23 +280,115 @@ class OllamaClient:
                     yield data
                 except json.JSONDecodeError:
                     continue
-    
-    def analyze_text(self, text: str, model: Optional[str] = None, 
+
+    def _call_openai_api(self, messages: List[Dict[str, str]], model: str,
+                        options: Optional[Dict] = None, format: Optional[str] = None) -> Dict[str, Any]:
+        """
+        调用OpenAI兼容API
+
+        Args:
+            messages: 消息列表（OpenAI格式）
+            model: 模型名称
+            options: 生成选项
+            format: 输出格式
+
+        Returns:
+            统一格式的响应
+        """
+        if not self.openai_config:
+            raise RuntimeError("OpenAI配置未初始化")
+
+        # 构建请求payload
+        payload = {
+            'model': model or self.openai_config.default_model,
+            'messages': messages
+        }
+
+        # 处理options参数（Ollama风格 -> OpenAI风格）
+        if options:
+            if 'temperature' in options:
+                payload['temperature'] = options['temperature']
+            if 'top_p' in options:
+                payload['top_p'] = options['top_p']
+            if 'max_tokens' in options:
+                payload['max_tokens'] = options['max_tokens']
+            # repeat_penalty -> frequency_penalty (近似映射)
+            if 'repeat_penalty' in options:
+                payload['frequency_penalty'] = (options['repeat_penalty'] - 1.0) * 2.0
+
+        # 如果options中没有temperature，使用默认值
+        if 'temperature' not in payload:
+            payload['temperature'] = self.openai_config.temperature
+        # 如果options中没有max_tokens，使用默认值
+        if 'max_tokens' not in payload:
+            payload['max_tokens'] = self.openai_config.max_tokens
+
+        # JSON格式输出（如果指定）
+        if format == 'json':
+            payload['response_format'] = {'type': 'json_object'}
+
+        # Debug模式打印请求信息
+        if self.debug_mode:
+            self.logger.debug(f"OpenAI API 请求: {self.openai_config.get_api_url('chat/completions')}")
+            self.logger.debug(f"请求参数: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+
+        try:
+            # 发送请求
+            response = self.session.post(
+                self.openai_config.get_api_url('chat/completions'),
+                json=payload,
+                headers=self.openai_config.get_headers(),
+                timeout=self.openai_config.timeout
+            )
+            response.raise_for_status()
+
+            # 解析响应
+            openai_result = response.json()
+
+            # 转换为Ollama格式的响应
+            result = {
+                'response': openai_result['choices'][0]['message']['content'],
+                'model': openai_result.get('model', model),
+                'created_at': datetime.now().isoformat(),
+                'done': True
+            }
+
+            # Debug模式打印响应
+            if self.debug_mode:
+                self.logger.debug(f"OpenAI API 响应: {result['response'][:500]}...")
+
+            return result
+
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"OpenAI API 请求失败: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = e.response.json()
+                    self.logger.error(f"错误详情: {error_detail}")
+                except:
+                    self.logger.error(f"错误响应: {e.response.text}")
+            raise
+
+    def analyze_text(self, text: str, model: Optional[str] = None,
                     analysis_type: str = "summary", enable_thinking: bool = False) -> str:
         """
         分析文本
-        
+
         Args:
             text: 待分析文本
             model: 模型名称，默认使用配置中的默认模型
             analysis_type: 分析类型 (summary, sentiment, keywords, etc.)
             enable_thinking: 是否启用思考过程输出，默认False（不显示思考过程）
-            
+
         Returns:
             分析结果
         """
         if not model:
-            model = self.config.default_model
+            # 根据后端类型选择默认模型
+            if self.backend == 'openai':
+                model = self.openai_config.default_model
+            else:
+                model = self.config.default_model
         
         # 根据分析类型构建prompt，添加输出控制指令
         
@@ -298,17 +439,21 @@ class OllamaClient:
     def analyze_logs(self, log_lines: List[str], model: Optional[str] = None, enable_thinking: bool = False) -> str:
         """
         分析日志文件
-        
+
         Args:
             log_lines: 日志行列表
             model: 模型名称
             enable_thinking: 是否启用思考过程输出，默认False
-            
+
         Returns:
             分析结果
         """
         if not model:
-            model = self.config.default_model
+            # 根据后端类型选择默认模型
+            if self.backend == 'openai':
+                model = self.openai_config.default_model
+            else:
+                model = self.config.default_model
         
         log_text = '\n'.join(log_lines[:100])  # 限制日志长度
         
@@ -336,17 +481,21 @@ class OllamaClient:
     def analyze_performance_data(self, data: Dict[str, Any], model: Optional[str] = None, enable_thinking: bool = False) -> str:
         """
         分析性能数据
-        
+
         Args:
             data: 性能数据字典
             model: 模型名称
             enable_thinking: 是否启用思考过程输出，默认False
-            
+
         Returns:
             分析结果
         """
         if not model:
-            model = self.config.default_model
+            # 根据后端类型选择默认模型
+            if self.backend == 'openai':
+                model = self.openai_config.default_model
+            else:
+                model = self.config.default_model
         
         data_str = json.dumps(data, indent=2, ensure_ascii=False)
         
