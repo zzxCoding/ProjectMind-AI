@@ -101,21 +101,29 @@ python3 examples/mr_review_pipeline.py --project-id 93 --mr-iid 7078 --test-mode
 - **API网关** - 统一的RESTful API接口
 - **独立服务** - 模块化设计，易于扩展和维护
 
-## 🔧 与Java后端集成
+## 🔧 与ProjectMind-AI集成
 
-### 在ProjectMind-AI中添加Python脚本
-1. 登录Web管理界面
-2. 添加新脚本，配置示例：
-   - **脚本名称**: `Python系统监控`
-   - **文件路径**: `python-scripts/data_analysis/performance_monitor.py`
-   - **工作目录**: `/app`
-   - **默认参数**: `--system --days 1 --output-format json`
+### 推荐的集成方式
+```bash
+# 1. 在ProjectMind-AI中添加Python脚本
+脚本路径: python-scripts/examples/mr_review_pipeline.py
+工作目录: /Users/xuan/worksapce/ProjectMind-AI
+默认参数: --project-id 93 --mr-iid 7078 --test-mode
 
-### 定时任务配置
-- **每日健康检查**: `0 6 * * *` 
-- **每周质量报告**: `0 9 * * 1`
-- **每日备份**: `0 2 * * *`
-- **MR自动审查**: `*/5 * * * *` (监控模式)
+# 2. 使用环境变量切换LLM后端
+export LLM_BACKEND=openai  # 使用OpenAI API
+export OPENAI_API_KEY=sk-your-key
+export OPENAI_MODEL=gpt-3.5-turbo
+
+# 或切换到Ollama
+export LLM_BACKEND=ollama
+export OLLAMA_MODEL=llama2
+```
+
+### 定时任务建议
+- **MR自动审查**: `*/5 * * * *` (监控模式，持续审查新的合并请求)
+- **每日质量报告**: `0 9 * * 1` (生成周报)
+- **SQL项目扫描**: `0 2 * * *` (在版本发布前扫描SQL异常)
 
 ## 🔍 故障排查
 
