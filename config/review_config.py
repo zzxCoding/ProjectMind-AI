@@ -16,7 +16,7 @@ class ReviewConfig:
     # 基础配置
     enable: bool = True
     auto_trigger: bool = True  # 自动触发审查
-    concurrent_reviews: int = 3  # 并发审查数量
+    concurrent_reviews: int = 1  # 并发审查数量
     
         
     # AI 审查配置

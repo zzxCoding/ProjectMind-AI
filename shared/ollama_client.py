@@ -423,7 +423,8 @@ class OllamaClient:
             raise
 
     def analyze_text(self, text: str, model: Optional[str] = None,
-                    analysis_type: str = "summary", enable_thinking: bool = False) -> str:
+                    analysis_type: str = "summary", enable_thinking: bool = False,
+                    options: Optional[Dict[str, Any]] = None) -> str:
         """
         分析文本
 
@@ -432,6 +433,7 @@ class OllamaClient:
             model: 模型名称，默认使用配置中的默认模型
             analysis_type: 分析类型 (summary, sentiment, keywords, etc.)
             enable_thinking: 是否启用思考过程输出，默认False（不显示思考过程）
+            options: 生成选项（temperature, top_p, repeat_penalty等）
 
         Returns:
             分析结果
@@ -442,9 +444,9 @@ class OllamaClient:
                 model = self.openai_config.default_model
             else:
                 model = self.config.default_model
-        
+
         # 根据分析类型构建prompt，添加输出控制指令
-        
+
         prompts = {
             "summary": f"请总结以下文本的主要内容:\n\n{text}",
             "sentiment": f"请分析以下文本的情感倾向(积极/消极/中性):\n\n{text}",
@@ -453,17 +455,17 @@ class OllamaClient:
             "translation": f"请将以下文本翻译成中文:\n\n{text}",
             "custom": f"{text}"  # 对于custom类型，保持原始prompt不变
         }
-        
+
         prompt = prompts.get(analysis_type, f"请分析以下文本:\n\n{text}")
-        
-        # 使用更新后的generate方法，传递enable_thinking参数
-        result = self.generate(model, prompt, enable_thinking=enable_thinking)
+
+        # 使用更新后的generate方法，传递enable_thinking参数和options
+        result = self.generate(model, prompt, options=options, enable_thinking=enable_thinking)
         response = result.get('response', result.get('error', '分析失败'))
-        
+
         # 如果不启用思考过程，清理输出中的think标签
         if not enable_thinking:
             response = self._clean_thinking_output(response)
-            
+
         return response
     
     def _clean_thinking_output(self, text: str) -> str:

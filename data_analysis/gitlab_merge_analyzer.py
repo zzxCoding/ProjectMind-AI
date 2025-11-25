@@ -289,11 +289,11 @@ As a GitLab project management expert, please analyze the merge record performan
 
 ## Detailed Merge Records
 """
-            
+
             # Add all merge request records
             for i, mr in enumerate(merge_requests):
                 prompt += f"{i+1}. **{mr['title']}** \n   📍 {mr['source_branch']} → {mr['target_branch']}\n"
-            
+
             prompt += f"""
 
 ## Branch Synchronization Rules
@@ -307,41 +307,80 @@ As a GitLab project management expert, please analyze the merge record performan
 - `release/YYYYMMDD → master` → Normal release to main branch, no additional sync needed
 - `release/YYYYMMDD → develop` → Normal release sync to develop branch, no additional sync needed
 
-## Missing Merge Detection Method
-1. **🎯 Target Branch Analysis** → Determine required sync targets based on source branch type
-2. **🔍 Issue Correlation** → Identify same fixes via issue numbers (B56479), title keywords, or source branch names
-3. **📋 Sync Record Search** → Search for corresponding sync merge requests in all records
-4. **⚠️ Risk Assessment** → Has sync record = Safe, No sync record = Missing merge risk
+## Missing Merge Detection Method (MUST Execute Step by Step)
+**For each MR, execute the following 4-step verification:**
+
+1. **🎯 Identify Sync Requirements**
+   - Extract: source_branch → target_branch
+   - Determine: Based on rules above, which branches MUST this MR sync to?
+   - Example: If `feature/xxx → release/20241030-b02`, then MUST sync to `develop` AND `develop-7.1`
+
+2. **🔍 Find Related Fixes**
+   - Extract issue number (B12345) or feature ID from MR title
+   - Mark this as "同源修复标识" (same-origin fix identifier)
+
+3. **📋 Search for Sync Records**
+   - In ALL {len(merge_requests)} MR records, search for MRs that:
+     * Contain the same issue number/feature ID (同源修复)
+     * Target the required sync branches (develop or develop-7.1)
+   - If found: Mark as ✅ Safe
+   - If NOT found: Mark as ⚠️ Missing Sync Risk
+
+4. **📊 Output Verification Result**
+   - List ONLY the MRs with missing sync risks
+   - For each risky MR, specify: MR #号, 标题简述, 源分支→目标分支, 缺失同步分支
 
 ## Analysis Dimensions (Output Structure)
-### 🚨 Missing Merge Risk Assessment
-- Check each merge request using the 4-step method
-- Flag high-risk merge requests
 
-### 🌿 Branch Compliance Evaluation
-- Does branch selection follow standards?
-- Are target branches chosen appropriately?
+### 🚨 漏合并风险清单 (MUST Output This Section)
+**Output Format (Use Markdown Table):**
 
-### 📊 Commit Pattern Analysis
-- Is code splitting granularity reasonable?
-- How is merge frequency and rhythm?
+| MR编号 | 标题 | 分支流向 | 缺失同步分支 | 风险等级 |
+|--------|------|----------|--------------|----------|
+| !1234  | xxx功能 | feature/xxx → release/20241030-b02 | develop, develop-7.1 | 🔴 高风险 |
 
-### 💡 Improvement Suggestions
-- Maximum 2 specific actionable recommendations
-- Based on actual data
+**If no missing merge risks found, output:**
+✅ 所有MR均已按规则同步，无漏合并风险
+
+### 🌿 分支合规性评估
+- 分支命名是否规范？
+- 目标分支选择是否合理？
+
+### 📊 提交模式分析
+- 代码拆分粒度是否合理？
+- 合并频率和节奏如何？
+
+### 💡 改进建议
+- 最多2条具体可执行的建议
+- 基于实际数据
 
 ## Output Requirements
-- ✅ Respond in Chinese
-- ✅ Keep total under 150 words
-- ✅ Base on actual data, avoid speculation
-- ✅ Strictly follow the 4-dimension structure
-- ✅ Use clear and concise language
+- ✅ 使用中文回答
+- ✅ 总字数控制在200字内（漏合并清单不计入字数限制）
+- ✅ 基于实际数据，避免猜测
+- ✅ 严格遵守4个维度的输出结构
+- ✅ **漏合并风险清单**是核心输出，必须逐条审查每个MR
+- ✅ 使用清晰简洁的语言
 """
             
             # 添加超时和错误处理
             try:
                 self.logger.debug(f"开始为开发者 {username} 调用Ollama API...")
-                result = self.ollama.analyze_text(prompt, model=self.ai_model, analysis_type="custom")
+
+                # 配置AI参数以获得更确定性和准确的输出
+                options = {
+                    'temperature': 0.0,      # 确定性输出，避免随机性
+                    'top_p': 0.7,            # 控制采样范围
+                    'repeat_penalty': 1.05,  # 减少重复内容
+                    'do_sample': False       # 对于OpenAI兼容API，确保确定性输出
+                }
+
+                result = self.ollama.analyze_text(
+                    prompt,
+                    model=self.ai_model,
+                    analysis_type="custom",
+                    options=options
+                )
                 self.logger.debug(f"开发者 {username} 的Ollama API调用成功")
                 return result
             except Exception as ollama_error:
@@ -395,29 +434,52 @@ As a GitLab project management expert, please analyze the merge record performan
             prompt += f"""
 
 ## 整体分析任务
-请基于上述各个开发者的个人AI分析结果，进行整体项目的归纳总结：
+请基于上述各个开发者的个人AI分析结果，进行简洁的项目级汇总。
 
-1. **团队协作模式**：分析团队的合并习惯和协作特点
-2. **风险汇总**：归纳所有开发者中发现的漏合并风险点
-3. **分支使用规范**：总结分支使用的整体情况和改进建议
-4. **项目健康度评估**：基于个人分析给出整体项目健康度评价
+## 输出结构 (严格遵守)
 
-## 漏合并输出格式
--  A. 风险人员：⚠️ 姓名 可能有漏合并风险
--  B. 漏合并分支：具体分支名 - 问题描述  
--  C. 漏合并请求：具体MR标题
+### 🚨 漏合并风险汇总
+**从每个开发者的分析中提取漏合并信息，输出格式：**
+- ⚠️ [姓名]：存在 X 个漏合并风险
+- ⚠️ [姓名]：存在 X 个漏合并风险
+- ✅ [姓名]：无漏合并风险
+
+**注意：**
+- 只统计人数，不列出具体MR详情
+- 按风险数量从高到低排序
+- 如果某人无风险，标记为✅
+
+### 🤝 团队协作模式
+1-2句话总结团队的合并习惯和协作特点
+
+### 💡 改进建议
+最多2条针对团队层面的具体建议
 
 ## 输出要求
-- 使用中文回答
-- 基于个人分析结果进行归纳，不要重复进行详细的漏合并检查
-- 重点突出团队层面的问题和建议
-- 结构清晰，总字数控制在200字内
+- ✅ 使用中文回答
+- ✅ 不要重复个人分析中的详细内容
+- ✅ 总字数控制在150字内
+- ✅ 简洁直观，便于快速了解项目整体风险
 """
             
             # 添加超时和错误处理
             try:
                 self.logger.debug("开始调用Ollama API进行整体分析...")
-                result = self.ollama.analyze_text(prompt, model=self.ai_model, analysis_type="custom")
+
+                # 配置AI参数以获得更确定性和准确的输出
+                options = {
+                    'temperature': 0.0,      # 确定性输出，避免随机性
+                    'top_p': 0.7,            # 控制采样范围
+                    'repeat_penalty': 1.05,  # 减少重复内容
+                    'do_sample': False       # 对于OpenAI兼容API，确保确定性输出
+                }
+
+                result = self.ollama.analyze_text(
+                    prompt,
+                    model=self.ai_model,
+                    analysis_type="custom",
+                    options=options
+                )
                 self.logger.debug("整体分析的Ollama API调用成功")
                 return result
             except Exception as ollama_error:
